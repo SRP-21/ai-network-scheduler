@@ -24,6 +24,7 @@ from traffic_generator import TrafficEngine, TRAFFIC_TYPES
 from ml_classifier import TrafficClassifier
 from scheduler import NetworkScheduler
 from network_viz import create_network_diagram, create_metric_charts, COLOURS
+from streaming_simulator import StreamingSimulator
 
 # ══════════════════════════════════════════════════════════════════════
 # PAGE CONFIG & DARK THEME
@@ -220,6 +221,19 @@ if "last_ui_state" not in st.session_state:
         "live_accuracy": 0.0
     }
 
+if "demo_running" not in st.session_state:
+    st.session_state.demo_running = False
+if "demo_bandwidth" not in st.session_state:
+    st.session_state.demo_bandwidth = 10
+if "streaming_sim" not in st.session_state:
+    st.session_state.streaming_sim = StreamingSimulator()
+if "demo_history" not in st.session_state:
+    st.session_state.demo_history = {
+        "dumb_buffer": [], "smart_buffer": [], 
+        "dumb_quality": [], "smart_quality": [], 
+        "dumb_stalls": [], "smart_stalls": []
+    }
+
 # Shorthand
 engine = st.session_state.engine
 classifier = st.session_state.classifier
@@ -367,12 +381,29 @@ try:
         state = scheduler.schedule(packets)
         st.session_state.last_ui_state["last_state"] = state
 
+        # ── 3.5 Streaming Demo ────────────────────────────────────────────
+        if st.session_state.demo_running:
+            demo_metrics = st.session_state.streaming_sim.tick(st.session_state.demo_bandwidth)
+            st.session_state.last_ui_state["demo_metrics"] = demo_metrics
+            
+            dh = st.session_state.demo_history
+            dh["dumb_buffer"].append(demo_metrics["dumb"]["buffer"])
+            dh["smart_buffer"].append(demo_metrics["smart"]["buffer"])
+            dh["dumb_quality"].append(demo_metrics["dumb"]["quality"])
+            dh["smart_quality"].append(demo_metrics["smart"]["quality"])
+            dh["dumb_stalls"].append(demo_metrics["dumb"]["stalls"])
+            dh["smart_stalls"].append(demo_metrics["smart"]["stalls"])
+            
+            for k in dh:
+                dh[k] = dh[k][-60:]
+
     else:
         # Paused: freeze UI at last known values without advancing tick
         tick = st.session_state.tick
         pred_counts = st.session_state.last_ui_state["pred_counts"]
         live_accuracy = st.session_state.last_ui_state["live_accuracy"]
         state = st.session_state.last_ui_state.get("last_state", scheduler._schedule_mode([], smart=scheduler.smart_mode))
+        demo_metrics = st.session_state.last_ui_state.get("demo_metrics", None)
 
     history = scheduler.get_history()
 
@@ -473,6 +504,108 @@ try:
             )
             st.pyplot(fig_m, use_container_width=True)
             plt.close(fig_m)
+
+    # ══════════════════════════════════════════════════════════════════════
+    # LIVE STREAMING DEMO
+    # ══════════════════════════════════════════════════════════════════════
+    st.divider()
+    st.markdown("### 🎬 LIVE STREAMING DEMO")
+    
+    demo_ctrl1, demo_ctrl2, demo_ctrl3 = st.columns([2, 1, 1])
+    with demo_ctrl1:
+        new_bw = st.slider("Bandwidth Limit", 1, 50, st.session_state.demo_bandwidth, step=1, format="%d Mbps")
+        if new_bw != st.session_state.demo_bandwidth:
+            st.session_state.demo_bandwidth = new_bw
+    with demo_ctrl2:
+        if st.button("START DEMO", use_container_width=True, type="primary" if not st.session_state.demo_running else "secondary"):
+            st.session_state.demo_running = True
+    with demo_ctrl3:
+        if st.button("RESET DEMO", use_container_width=True):
+            st.session_state.demo_running = False
+            st.session_state.streaming_sim.reset()
+            for k in st.session_state.demo_history:
+                st.session_state.demo_history[k] = []
+            st.session_state.last_ui_state["demo_metrics"] = None
+            
+    if not st.session_state.demo_running:
+        st.info("Press START DEMO to begin the video streaming simulation.")
+    else:
+        demo_col1, demo_col2 = st.columns(2)
+        
+        VIDEO_URL = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+        
+        dm = st.session_state.last_ui_state.get("demo_metrics")
+        if dm:
+            def get_status(buffer):
+                if buffer < 0.5: return "🔴 BUFFERING..."
+                if buffer < 5: return "🟡 DEGRADED"
+                return "🟢 SMOOTH"
+                
+            dumb_stat = get_status(dm["dumb"]["buffer"])
+            smart_stat = get_status(dm["smart"]["buffer"])
+            
+            with demo_col1:
+                st.markdown("#### WITHOUT AI (FIFO)")
+                # Wrap video in empty to avoid rerendering glitches on every tick
+                st.video(VIDEO_URL)
+                
+                st.markdown(f"**Status:** {dumb_stat}")
+                st.metric("Buffer Health", f"{dm['dumb']['buffer']:.1f}s")
+                st.markdown(f"**Quality:** <span style='font-size:1.5em;font-weight:bold;color:#38bdf8;'>{dm['dumb']['quality']}p</span>", unsafe_allow_html=True)
+                st.markdown(f"**Stalls:** {dm['dumb']['stalls']} | **Dropped frames:** {dm['dumb']['dropped']}")
+                
+                # Render DUMB graph
+                fig_d, ax_d = plt.subplots(figsize=(5, 2))
+                fig_d.patch.set_facecolor('#0f172a')
+                ax_d.set_facecolor('#0f172a')
+                ax_d.tick_params(colors='#e2e8f0', labelsize=8)
+                for spine in ax_d.spines.values(): spine.set_color('none')
+                
+                dh = st.session_state.demo_history
+                x = list(range(len(dh["dumb_buffer"])))
+                ax_d.plot(x, dh["dumb_buffer"], color='#38bdf8', label='Buffer (s)', linewidth=2)
+                
+                # Quality overlay (scaled down to fit 0-30 axis)
+                q_map = {144: 5, 240: 10, 480: 15, 720: 20, 1080: 25}
+                q_line = [q_map.get(q, 5) for q in dh["dumb_quality"]]
+                ax_d.plot(x, q_line, color='#f59e0b', label='Quality', linewidth=1, linestyle='--')
+                
+                for i, stl in enumerate(dh["dumb_stalls"]):
+                    if i > 0 and stl > dh["dumb_stalls"][i-1]:
+                        ax_d.axvline(x=i, color='#ef4444', alpha=0.5, linewidth=2)
+                
+                ax_d.set_ylim(0, 30)
+                st.pyplot(fig_d, use_container_width=True)
+                plt.close(fig_d)
+                
+            with demo_col2:
+                st.markdown("#### WITH AI SCHEDULER")
+                st.video(VIDEO_URL)
+                
+                st.markdown(f"**Status:** {smart_stat}")
+                st.metric("Buffer Health", f"{dm['smart']['buffer']:.1f}s")
+                st.markdown(f"**Quality:** <span style='font-size:1.5em;font-weight:bold;color:#10b981;'>{dm['smart']['quality']}p</span>", unsafe_allow_html=True)
+                st.markdown(f"**Stalls:** {dm['smart']['stalls']} | **Dropped frames:** {dm['smart']['dropped']}")
+                
+                # Render SMART graph
+                fig_s, ax_s = plt.subplots(figsize=(5, 2))
+                fig_s.patch.set_facecolor('#0f172a')
+                ax_s.set_facecolor('#0f172a')
+                ax_s.tick_params(colors='#e2e8f0', labelsize=8)
+                for spine in ax_s.spines.values(): spine.set_color('none')
+                
+                ax_s.plot(x, dh["smart_buffer"], color='#10b981', label='Buffer (s)', linewidth=2)
+                
+                q_line_s = [q_map.get(q, 5) for q in dh["smart_quality"]]
+                ax_s.plot(x, q_line_s, color='#f59e0b', label='Quality', linewidth=1, linestyle='--')
+                
+                for i, stl in enumerate(dh["smart_stalls"]):
+                    if i > 0 and stl > dh["smart_stalls"][i-1]:
+                        ax_s.axvline(x=i, color='#ef4444', alpha=0.5, linewidth=2)
+                
+                ax_s.set_ylim(0, 30)
+                st.pyplot(fig_s, use_container_width=True)
+                plt.close(fig_s)
 
 except Exception as e:
     st.error(f"Error during simulation tick: {e}")

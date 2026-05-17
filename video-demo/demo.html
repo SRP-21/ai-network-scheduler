@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Network Scheduler — Live Demo</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #fff; color: #333; }
+.container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+
+/* Row 1 — Title + Controls */
+.title-row {
+  text-align: center; padding: 20px 0 16px; border-bottom: 1px solid #e0e0e0; margin-bottom: 16px;
+}
+.title-row h1 { font-size: 22px; font-weight: 700; color: #1a1a1a; margin-bottom: 12px; }
+.controls {
+  display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap;
+}
+.controls label { font-size: 13px; font-weight: 600; color: #555; }
+.controls input[type=range] { width: 220px; accent-color: #D50000; }
+.throttle-val { font-size: 14px; font-weight: 700; color: #D50000; min-width: 80px; }
+.btn {
+  padding: 6px 16px; border: none; border-radius: 4px; font-size: 12px; font-weight: 700;
+  cursor: pointer; text-transform: uppercase; color: #fff; transition: opacity 0.2s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-apply { background: #D50000; }
+.btn-reset { background: #757575; }
+
+/* Row 2 — Video Players */
+.video-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.video-panel {
+  border: 2px solid #e0e0e0; border-radius: 8px; overflow: hidden; background: #fafafa;
+}
+.video-panel.left  { border-color: #ffcdd2; }
+.video-panel.right { border-color: #c8e6c9; }
+
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; font-size: 13px; font-weight: 700;
+}
+.panel-header.red-bg  { background: #ffebee; color: #D50000; }
+.panel-header.green-bg { background: #e8f5e9; color: #2e7d32; }
+
+.status-badge {
+  font-size: 12px; padding: 3px 10px; border-radius: 12px; font-weight: 700;
+}
+.badge-buffering { background: #D50000; color: white; }
+.badge-smooth    { background: #00C853; color: white; }
+
+video { width: 100%; display: block; background: #000; }
+
+.metrics {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 10px 14px;
+  background: #fff; border-top: 1px solid #eee;
+}
+.metric { text-align: center; }
+.metric-label { font-size: 10px; text-transform: uppercase; color: #999; font-weight: 600; }
+.metric-value { font-size: 18px; font-weight: 700; margin-top: 2px; }
+.metric-value.red { color: #D50000; }
+.metric-value.green { color: #00C853; }
+
+/* Row 3 — Graphs */
+.graph-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.graph-panel {
+  border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background: #fafafa;
+}
+.graph-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; color: #757575;
+  padding: 8px 12px; background: #f5f5f5; border-bottom: 1px solid #e0e0e0;
+}
+canvas { display: block; width: 100%; }
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- ROW 1 -->
+  <div class="title-row">
+    <h1>AI Network Scheduler — Live Demo</h1>
+    <div class="controls">
+      <label>Throttle (WITHOUT AI):</label>
+      <input type="range" id="bwSlider" min="50" max="2000" value="200" step="10">
+      <span class="throttle-val" id="bwLabel">200 KB/s</span>
+      <button class="btn btn-apply" id="btnApply">APPLY</button>
+      <button class="btn btn-reset" id="btnReset">RESET</button>
+      <div style="width: 2px; height: 30px; background: #e0e0e0; margin: 0 10px;"></div>
+      <label>SEEK BOTH VIDEOS:</label>
+      <input type="range" id="seekSlider" min="0" max="596" value="0" step="1">
+      <span class="throttle-val" id="seekLabel">00:00</span>
+    </div>
+  </div>
+
+  <!-- ROW 2 -->
+  <div class="video-row">
+    <div class="video-panel left">
+      <div class="panel-header red-bg">
+        <span>❌ WITHOUT AI (FIFO)</span>
+        <span class="status-badge badge-buffering" id="statusLeft">⏳ LOADING</span>
+      </div>
+      <video id="videoLeft" controls autoplay muted playsinline preload="none" buffered="0">
+        <source src="http://localhost:3001/video" type="video/mp4">
+      </video>
+      <div class="metrics">
+        <div class="metric"><div class="metric-label">Buffer</div><div class="metric-value red" id="bufLeft">0.0s</div></div>
+        <div class="metric"><div class="metric-label">Speed</div><div class="metric-value red" id="speedLeft">0 KB/s</div></div>
+        <div class="metric"><div class="metric-label">Stalls</div><div class="metric-value red" id="stallsLeft">0</div></div>
+      </div>
+    </div>
+    <div class="video-panel right">
+      <div class="panel-header green-bg">
+        <span>✅ WITH AI SCHEDULER</span>
+        <span class="status-badge badge-smooth" id="statusRight">⏳ LOADING</span>
+      </div>
+      <video id="videoRight" controls autoplay muted playsinline preload="none" buffered="0">
+        <source src="http://localhost:3002/video" type="video/mp4">
+      </video>
+      <div class="metrics">
+        <div class="metric"><div class="metric-label">Buffer</div><div class="metric-value green" id="bufRight">0.0s</div></div>
+        <div class="metric"><div class="metric-label">Speed</div><div class="metric-value green" id="speedRight">0 KB/s</div></div>
+        <div class="metric"><div class="metric-label">Stalls</div><div class="metric-value green" id="stallsRight">0</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 3 -->
+  <div class="graph-row">
+    <div class="graph-panel">
+      <div class="graph-title">Throughput (KB/s)</div>
+      <canvas id="graphSpeed" width="380" height="180"></canvas>
+    </div>
+    <div class="graph-panel">
+      <div class="graph-title">Buffer Health (seconds ahead)</div>
+      <canvas id="graphBuffer" width="380" height="180"></canvas>
+    </div>
+    <div class="graph-panel">
+      <div class="graph-title">Stall Events (cumulative)</div>
+      <canvas id="graphStalls" width="380" height="180"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // ── Elements ──────────────────────────────────────────────────────
+  var vL = document.getElementById('videoLeft');
+  var vR = document.getElementById('videoRight');
+  var slider = document.getElementById('bwSlider');
+  var bwLabel = document.getElementById('bwLabel');
+
+  // ── Stall counters ────────────────────────────────────────────────
+  var leftStalls = 0, rightStalls = 0;
+
+  // Force videos to NOT auto-download anything
+  vL.preload = 'none';
+  vL.load();
+  vR.preload = 'none';
+  vR.load();
+
+  vL.addEventListener('waiting', function() {
+    leftStalls++;
+    document.getElementById('statusLeft').textContent = '🔴 BUFFERING';
+    document.getElementById('statusLeft').className = 'status-badge badge-buffering';
+  });
+  vL.addEventListener('playing', function() {
+    document.getElementById('statusLeft').textContent = '🟢 SMOOTH';
+    document.getElementById('statusLeft').className = 'status-badge badge-smooth';
+  });
+  vR.addEventListener('waiting', function() {
+    rightStalls++;
+    document.getElementById('statusRight').textContent = '🔴 BUFFERING';
+    document.getElementById('statusRight').className = 'status-badge badge-buffering';
+  });
+  vR.addEventListener('playing', function() {
+    document.getElementById('statusRight').textContent = '🟢 SMOOTH';
+    document.getElementById('statusRight').className = 'status-badge badge-smooth';
+  });
+
+  // ── Slider ────────────────────────────────────────────────────────
+  slider.addEventListener('input', function() {
+    bwLabel.textContent = slider.value + ' KB/s';
+  });
+  document.getElementById('btnApply').addEventListener('click', function() {
+    fetch('http://localhost:3001/set-bandwidth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kbps: parseInt(slider.value, 10) })
+    }).catch(function() {});
+  });
+  document.getElementById('btnReset').addEventListener('click', function() {
+    slider.value = 200;
+    bwLabel.textContent = '200 KB/s';
+    fetch('http://localhost:3001/set-bandwidth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kbps: 200 })
+    }).catch(function() {});
+    // Reset stall counters
+    leftStalls = 0; rightStalls = 0;
+    // Clear graph data
+    for (var k = 0; k < MAX_POINTS; k++) {
+      speedDataL[k]=0; speedDataR[k]=0;
+      bufDataL[k]=0; bufDataR[k]=0;
+      stallDataL[k]=0; stallDataR[k]=0;
+    }
+    // Reload videos
+    vL.currentTime = 0; vL.load(); vL.play().catch(function(){});
+    vR.currentTime = 0; vR.load(); vR.play().catch(function(){});
+  });
+  var seekSlider = document.getElementById('seekSlider');
+  var seekLabel = document.getElementById('seekLabel');
+
+  function formatTime(sec) {
+    var m = Math.floor(sec / 60);
+    var s = Math.floor(sec % 60);
+    return (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+  }
+
+  seekSlider.addEventListener('input', function() {
+    var val = parseInt(seekSlider.value, 10);
+    seekLabel.textContent = formatTime(val);
+    vL.currentTime = val;
+    vR.currentTime = val;
+  });
+
+  vL.addEventListener('timeupdate', function() {
+    seekSlider.value = vL.currentTime;
+    seekLabel.textContent = formatTime(vL.currentTime);
+  });
+
+  // ── Buffer health reader ──────────────────────────────────────────
+  function getBuf(v) {
+    try {
+      if (v.buffered && v.buffered.length > 0) {
+        return Math.max(0, v.buffered.end(v.buffered.length - 1) - v.currentTime);
+      }
+    } catch(e) {}
+    return 0;
+  }
+
+  // ── Graph data ────────────────────────────────────────────────────
+  var MAX_POINTS = 60;
+  var speedDataL = [], speedDataR = [];
+  var bufDataL = [], bufDataR = [];
+  var stallDataL = [], stallDataR = [];
+  for (var i = 0; i < MAX_POINTS; i++) {
+    speedDataL.push(0); speedDataR.push(0);
+    bufDataL.push(0); bufDataR.push(0);
+    stallDataL.push(0); stallDataR.push(0);
+  }
+
+  // ── Draw graph helper ─────────────────────────────────────────────
+  function drawGraph(canvasId, dataRed, dataGreen, maxY, labelY, isBar) {
+    var c = document.getElementById(canvasId);
+    var ctx = c.getContext('2d');
+    var W = c.width, H = c.height;
+    var padL = 40, padR = 10, padT = 16, padB = 20;
+    var gW = W - padL - padR, gH = H - padT - padB;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = '#eee';
+    ctx.lineWidth = 1;
+    for (var g = 0; g <= 4; g++) {
+      var gy = padT + (gH / 4) * g;
+      ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(W - padR, gy); ctx.stroke();
+    }
+
+    // Y-axis labels
+    ctx.fillStyle = '#999'; ctx.font = '9px system-ui'; ctx.textAlign = 'right';
+    for (var g = 0; g <= 4; g++) {
+      var gy = padT + (gH / 4) * g;
+      var val = Math.round(maxY - (maxY / 4) * g);
+      ctx.fillText(val, padL - 4, gy + 3);
+    }
+
+    // X-axis label
+    ctx.textAlign = 'center';
+    ctx.fillText('60s ago', padL + 10, H - 4);
+    ctx.fillText('now', W - padR - 10, H - 4);
+
+    var stepX = gW / (MAX_POINTS - 1);
+
+    if (isBar) {
+      // Bar chart
+      var barW = Math.max(2, (gW / MAX_POINTS) * 0.4);
+      for (var i = 0; i < MAX_POINTS; i++) {
+        var x = padL + i * stepX;
+        var hR = (dataRed[i] / maxY) * gH;
+        var hG = (dataGreen[i] / maxY) * gH;
+        ctx.fillStyle = 'rgba(213,0,0,0.6)';
+        ctx.fillRect(x - barW, padT + gH - hR, barW, hR);
+        ctx.fillStyle = 'rgba(0,200,83,0.6)';
+        ctx.fillRect(x, padT + gH - hG, barW, hG);
+      }
+    } else {
+      // Line chart
+      function drawLine(data, color) {
+        ctx.strokeStyle = color; ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (var i = 0; i < data.length; i++) {
+          var x = padL + i * stepX;
+          var y = padT + gH - (data[i] / maxY) * gH;
+          y = Math.max(padT, Math.min(padT + gH, y));
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      drawLine(dataRed, '#D50000');
+      drawLine(dataGreen, '#00C853');
+    }
+
+    // Legend
+    ctx.font = '9px system-ui'; ctx.textAlign = 'left';
+    ctx.fillStyle = '#D50000'; ctx.fillRect(W - padR - 90, 4, 8, 8);
+    ctx.fillStyle = '#333'; ctx.fillText('Without AI', W - padR - 78, 11);
+    ctx.fillStyle = '#00C853'; ctx.fillRect(W - padR - 90, 16, 8, 8);
+    ctx.fillStyle = '#333'; ctx.fillText('With AI', W - padR - 78, 23);
+  }
+
+  // ── Metrics update (500ms) ────────────────────────────────────────
+  setInterval(function() {
+    // Buffer health from video elements
+    var bufL = getBuf(vL), bufR = getBuf(vR);
+    document.getElementById('bufLeft').textContent = bufL.toFixed(1) + 's';
+    document.getElementById('bufRight').textContent = bufR.toFixed(1) + 's';
+    document.getElementById('stallsLeft').textContent = leftStalls;
+    document.getElementById('stallsRight').textContent = rightStalls;
+
+    // Status badges based on readyState
+    if (vL.readyState >= 3 && !vL.paused) {
+      document.getElementById('statusLeft').textContent = '🟢 SMOOTH';
+      document.getElementById('statusLeft').className = 'status-badge badge-smooth';
+    } else if (vL.readyState < 3 && !vL.paused && vL.currentTime > 0) {
+      document.getElementById('statusLeft').textContent = '🔴 BUFFERING';
+      document.getElementById('statusLeft').className = 'status-badge badge-buffering';
+    }
+    if (vR.readyState >= 3 && !vR.paused) {
+      document.getElementById('statusRight').textContent = '🟢 SMOOTH';
+      document.getElementById('statusRight').className = 'status-badge badge-smooth';
+    }
+  }, 500);
+
+  // ── Graph + server stats update (1s) ──────────────────────────────
+  var prevBytesL = 0, prevBytesR = 0;
+  setInterval(function() {
+    var bufL = getBuf(vL), bufR = getBuf(vR);
+
+    // Fetch server stats
+    fetch('http://localhost:3001/stats').then(function(r) { return r.json(); }).then(function(s) {
+      var speedKbps = 0;
+      if (prevBytesL > 0) {
+        speedKbps = (s.bytesServed - prevBytesL) / 1024;
+      }
+      prevBytesL = s.bytesServed;
+
+      speedDataL.push(speedKbps);
+      if (speedDataL.length > MAX_POINTS) speedDataL.shift();
+      document.getElementById('speedLeft').textContent = Math.round(speedKbps) + ' KB/s';
+    }).catch(function() { speedDataL.push(0); if (speedDataL.length > MAX_POINTS) speedDataL.shift(); });
+
+    fetch('http://localhost:3002/stats').then(function(r) { return r.json(); }).then(function(s) {
+      var speedKbps = 0;
+      if (prevBytesR > 0) {
+        speedKbps = (s.bytesServed - prevBytesR) / 1024;
+      }
+      prevBytesR = s.bytesServed;
+
+      speedDataR.push(speedKbps);
+      if (speedDataR.length > MAX_POINTS) speedDataR.shift();
+      document.getElementById('speedRight').textContent = Math.round(speedKbps) + ' KB/s';
+    }).catch(function() { speedDataR.push(0); if (speedDataR.length > MAX_POINTS) speedDataR.shift(); });
+
+    // Buffer data
+    bufDataL.push(bufL); if (bufDataL.length > MAX_POINTS) bufDataL.shift();
+    bufDataR.push(bufR); if (bufDataR.length > MAX_POINTS) bufDataR.shift();
+
+    // Stall data
+    stallDataL.push(leftStalls); if (stallDataL.length > MAX_POINTS) stallDataL.shift();
+    stallDataR.push(rightStalls); if (stallDataR.length > MAX_POINTS) stallDataR.shift();
+
+    // Compute max values for dynamic scaling
+    var maxSpeed = Math.max(200, Math.max.apply(null, speedDataL), Math.max.apply(null, speedDataR)) * 1.2;
+    var maxBuf = Math.max(5, Math.max.apply(null, bufDataL), Math.max.apply(null, bufDataR)) * 1.2;
+    var maxStall = Math.max(3, Math.max(leftStalls, rightStalls)) * 1.2;
+
+    // Redraw all graphs
+    drawGraph('graphSpeed', speedDataL, speedDataR, maxSpeed, 'KB/s', false);
+    drawGraph('graphBuffer', bufDataL, bufDataR, maxBuf, 'sec', false);
+    drawGraph('graphStalls', stallDataL, stallDataR, maxStall, 'count', true);
+  }, 1000);
+
+})();
+</script>
+</body>
+</html>

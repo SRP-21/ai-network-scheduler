@@ -1,0 +1,15 @@
+{
+  "name": "ai-network-proxy",
+  "version": "1.0.0",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js",
+    "export-cert": "node proxy.js --export-cert"
+  },
+  "dependencies": {
+    "http-proxy": "^1.18.1",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "node-forge": "^1.3.1"
+  }
+}

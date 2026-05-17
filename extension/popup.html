@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="grid-container">
+    <div class="cell">
+      <div class="header">AI SCHEDULER</div>
+      <div class="content center">
+        <label class="switch"><input type="checkbox" id="ai-toggle"><span class="slider round"></span></label>
+        <div id="ai-status-text">OFF</div>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="header">BANDWIDTH LIMIT</div>
+      <div class="content center">
+        <input type="range" id="bw-slider" min="1" max="50" value="10">
+        <div id="bw-value" class="stat-value">10 Mbps</div>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="header">STATUS</div>
+      <div class="content">
+        <div>Proxy: <strong id="status-proxy">🔴 OFFLINE</strong></div>
+        <div>Mode: <strong id="status-mode">AI OFF</strong></div>
+        <div>Intercepted: <strong id="status-intercepted">0</strong></div>
+        <div>Freed: <strong id="status-freed">0.0 MB</strong></div>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="header red-header">WITHOUT AI (FIFO)</div>
+      <div class="content">
+        <div>Buffer Health:</div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill red-fill" id="wo-buffer-bar"></div></div>
+        <div class="stat-value" id="wo-buffer">0.0s</div>
+        <div>Quality: <strong id="wo-quality">--</strong></div>
+        <div>Stalls: <strong id="wo-stalls">0</strong></div>
+        <button class="role-btn role-btn-red" id="btn-set-without">SET THIS TAB = WITHOUT AI</button>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="header green-header">WITH AI SCHEDULER</div>
+      <div class="content">
+        <div>Buffer Health:</div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill green-fill" id="wa-buffer-bar"></div></div>
+        <div class="stat-value" id="wa-buffer">0.0s</div>
+        <div>Quality: <strong id="wa-quality">--</strong></div>
+        <div>Stalls: <strong id="wa-stalls">0</strong></div>
+        <button class="role-btn role-btn-green" id="btn-set-with">SET THIS TAB = WITH AI</button>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="header">PERFORMANCE COMPARISON</div>
+      <div class="content center"><canvas id="bar-chart" width="220" height="120"></canvas></div>
+    </div>
+    <div class="cell">
+      <div class="header">PACKET FLOW DETAILS</div>
+      <div class="content log-box" id="packet-flow"></div>
+    </div>
+    <div class="cell">
+      <div class="header">QUEUE STATS</div>
+      <div class="content">
+        <div>Video Passed: <strong id="qs-video">0</strong></div>
+        <div>Ads Delayed: <strong id="qs-ads">0</strong></div>
+        <div>Analytics Delayed: <strong id="qs-analytics">0</strong></div>
+        <div>Thumbnails Delayed: <strong id="qs-thumbnails">0</strong></div>
+        <div>Total Saved: <strong id="qs-saved">0.0 MB</strong></div>
+        <div>Avg Delay: <strong id="qs-avg-delay">0ms</strong></div>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="header">ML CLASSIFIER OUTPUT</div>
+      <div class="content log-box" id="ml-output"></div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "video-demo",
+  "version": "1.0.0",
+  "description": "AI Network Scheduler — Local Video Streaming Demo",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+}
